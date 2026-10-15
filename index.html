@@ -500,8 +500,66 @@
   const adminIcon = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: text-bottom; margin-right: 4px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`;
   const advisorIcon = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: text-bottom; margin-right: 4px;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>`;
 
+  // 錄音用全域變數
+  let mediaRecorder;
+  let audioChunks = [];
+  let isRecording = false;
 
-  // 全局變數
+  
+  async function toggleRecording(btn) {
+    if (!isRecording) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        
+        mediaRecorder.ondataavailable = e => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+        };
+        
+        mediaRecorder.onstop = () => {
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          const reader = new FileReader();
+          reader.readAsDataURL(audioBlob);
+          reader.onloadend = () => {
+            pendingFileObj = {
+              fileName: `VoiceRecord_${new Date().getTime()}.webm`,
+              mimeType: 'audio/webm',
+              base64: reader.result.split(',')[1]
+            };
+            
+            
+            const activeTab = document.querySelector('.tab-content.active-tab').id;
+            if (activeTab === 'view-client') sendClientMessage();
+            else if (activeTab === 'view-warroom') sendWarRoomMessage();
+            else if (activeTab === 'view-admin') sendMessage();
+          };
+        };
+        
+        mediaRecorder.start();
+        isRecording = true;
+        
+        
+        btn.style.backgroundColor = '#ffebee';
+        btn.querySelector('svg').style.stroke = '#c62828';
+        btn.querySelector('svg').style.animation = 'pulse 1.5s infinite';
+      } catch (err) {
+        alert("無法存取麥克風，請確認您的裝置或瀏覽器權限是否已開啟！");
+        console.error(err);
+      }
+    } else {
+      mediaRecorder.stop();
+      mediaRecorder.stream.getTracks().forEach(track => track.stop());
+      isRecording = false;
+      
+      
+      btn.style.backgroundColor = '';
+      btn.querySelector('svg').style.stroke = '';
+      btn.querySelector('svg').style.animation = '';
+    }
+  }
+
+  
   let systemBotName = "智能客服";
   let pendingFileObj = null;
   let lastClientDate = "";
@@ -1481,6 +1539,14 @@ function switchTab(tabId) {
     setLineIcon('.icon-btn[title="文件"] svg', '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline>');
     setLineIcon('.icon-btn[title="語音"] svg', '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line>');
     setLineIcon('.send-btn svg', '<line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>');
+
+    // 覆寫所有語音按鈕行為：綁定即時錄音事件 (取代預設的檔案上傳)
+    document.querySelectorAll('.icon-btn[title="語音"]').forEach(btn => {
+      btn.onclick = function(e) {
+        e.preventDefault();
+        toggleRecording(this);
+      };
+    });
   });
 </script>
 </body>
